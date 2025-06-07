@@ -57,7 +57,7 @@ CACHE_LOAD_WORKERS = 12 # For initial parallel caching into RAM (set to 0 for se
 PIN_MEMORY     = True
 FMA_EPOCHS     = 25
 GTZ_EPOCHS     = 45
-FREEZE_EPOCHS  = 10 # Can increase if needed, e.g. 5
+FREEZE_EPOCHS  = 5 # Can increase if needed, e.g. 5
 DEVICE         = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 FMA_WEIGHT_DECAY = 2e-3
