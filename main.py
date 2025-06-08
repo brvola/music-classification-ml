@@ -24,7 +24,7 @@ from collections import Counter
 from sklearn.metrics import f1_score, confusion_matrix
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
-
+import time
 
 SEED = 805
 torch.manual_seed(SEED)
@@ -424,6 +424,8 @@ def main():
         else: print("WARN: GTZAN class count/weight issue. No weights used.")
     else: print("WARN: GTZAN train split empty. No weights used.")
     
+    start = time.time()
+
     # FMA Pretraining
     feature_extractor = FeatExtractor().to(DEVICE)
     classifier_fma = Classifier(512, n_fma_classes, 0.5, 0.2).to(DEVICE)
@@ -498,9 +500,13 @@ def main():
         history["gtz_test"] = {"test_loss":ts_loss,"test_acc":ts_acc,"test_f1":ts_f1,"confusion_matrix":ts_cm.tolist() if ts_cm is not None else None}
     else: print(f"WARN: {model_save_name_gtz} not found. Skipping test eval.")
 
+    end = time.time()
+
     print("\n--- Saving metrics to metrics_std_splits_specaug.json ---") 
     with open("metrics_std_splits_specaug.json","w") as jf: json.dump(history,jf,indent=2)
     print("\nScript finished.")
+
+    print(f"Total runtime: {end - start:.2f} seconds")
 
 if __name__ == "__main__":
     try:
@@ -521,3 +527,6 @@ if __name__ == "__main__":
         else:
             print(f"Current start method already set to: {current_method}")
     main()
+
+
+    # pip install --upgrade --force-reinstall torch torchvision torchaudio
