@@ -18,9 +18,8 @@ def set_seed(seed: int):
     
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
+        torch.cuda.manual_seed_all(seed) 
     
-    # These two settings are crucial for deterministic results with CUDNN
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     

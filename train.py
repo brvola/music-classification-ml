@@ -19,7 +19,7 @@ from sklearn.metrics import f1_score, confusion_matrix
 from tqdm import tqdm
 from multiprocessing import Pool, cpu_count
 import time
-
+from data_prep.downloader import ensure_gtzan_splits, verify_kaggle_dataset
 # Import individual variables from the config file
 from config import (
     GTZAN_ROOT, FMA_ROOT, FMA_METADATA,
@@ -41,34 +41,57 @@ from data_prep.dataset import InMemorySpectrogramDataset
 from model.classifier import Classifier, FeatExtractor, train_epoch, validate_epoch
 from utils import set_seed, seed_worker
 
+# Commented out for now since we already have the precomputed spectrograms
 
 def main(device):
     set_seed(805)
+    ensure_gtzan_splits()
+    if not verify_kaggle_dataset():
+        print("ERR: Kaggle dataset not found or incomplete. Please download it from Kaggle and place it into /data.")
+        sys.exit(1)
     print_model_info(device)
-    _gtzan_all_possible_classes = sorted([d for d in os.listdir(GTZAN_ROOT) if os.path.isdir(os.path.join(GTZAN_ROOT, d))])
-    gtzan_raw_train, gtzan_raw_val, gtzan_raw_test = build_gtzan_samples_from_sturm_splits(GTZAN_ROOT, _gtzan_all_possible_classes)
+
+    # The original code was trying to find genre folders in the raw audio directory (GTZAN_ROOT).
+    # Since we are using precomputed data, we should get the class list directly from the
+    # precomputed training directory's subfolders.
+    # _gtzan_all_possible_classes = sorted([d for d in os.listdir(PRECOMP_GTZAN_TRAIN_DIR) if os.path.isdir(os.path.join(GTZAN_ROOT, d))])
+    if not os.path.exists(PRECOMP_GTZAN_TRAIN_DIR) or not os.listdir(PRECOMP_GTZAN_TRAIN_DIR):
+        sys.exit(f"ERR: Precomputed GTZAN training directory not found or is empty: {PRECOMP_GTZAN_TRAIN_DIR}")
+    _gtzan_all_possible_classes = sorted([d for d in os.listdir(PRECOMP_GTZAN_TRAIN_DIR) if os.path.isdir(os.path.join(PRECOMP_GTZAN_TRAIN_DIR, d))])
+    
     n_gtz_classes = len(_gtzan_all_possible_classes)
-    print(f"GTZAN Sturm splits (raw): Tr={len(gtzan_raw_train)}, Vl={len(gtzan_raw_val)}, Ts={len(gtzan_raw_test)}. Classes: {n_gtz_classes}")
 
-    fma_raw_train, fma_raw_val, fma_raw_test, fma_classes_list = build_fma_samples_with_official_splits(FMA_ROOT, FMA_METADATA)
-    n_fma_classes = len(fma_classes_list)
-    print(f"FMA Official splits (raw): Tr={len(fma_raw_train)}, Vl={len(fma_raw_val)}, Ts={len(fma_raw_test)}. Classes: {n_fma_classes}")
+    # The following lines are correctly commented out as they deal with raw audio files.
+    # gtzan_raw_train, gtzan_raw_val, gtzan_raw_test = build_gtzan_samples_from_sturm_splits(GTZAN_ROOT, _gtzan_all_possible_classes)
+    # print(f"GTZAN Sturm splits (raw): Tr={len(gtzan_raw_train)}, Vl={len(gtzan_raw_val)}, Ts={len(gtzan_raw_test)}. Classes: {n_gtz_classes}")
+    # fma_raw_train, fma_raw_val, fma_raw_test, fma_classes_list = build_fma_samples_with_official_splits(FMA_ROOT, FMA_METADATA)
+    # n_fma_classes = len(fma_classes_list)
+    # print(f"FMA Official splits (raw): Tr={len(fma_raw_train)}, Vl={len(fma_raw_val)}, Ts={len(fma_raw_test)}. Classes: {n_fma_classes}")
 
-    run_parallel_preprocessing(gtzan_raw_train, _gtzan_all_possible_classes, PRECOMP_GTZAN_TRAIN_DIR, "GTZAN Train")
-    run_parallel_preprocessing(gtzan_raw_val,   _gtzan_all_possible_classes, PRECOMP_GTZAN_VAL_DIR,   "GTZAN Val")
-    run_parallel_preprocessing(gtzan_raw_test,  _gtzan_all_possible_classes, PRECOMP_GTZAN_TEST_DIR,  "GTZAN Test")
-    run_parallel_preprocessing(fma_raw_train, fma_classes_list, PRECOMP_FMA_TRAIN_DIR, "FMA Train")
-    run_parallel_preprocessing(fma_raw_val,   fma_classes_list, PRECOMP_FMA_VAL_DIR,   "FMA Val")
-    run_parallel_preprocessing(fma_raw_test,  fma_classes_list, PRECOMP_FMA_TEST_DIR,  "FMA Test")
+    # The preprocessing steps are also correctly commented out.
+    # run_parallel_preprocessing(gtzan_raw_train, _gtzan_all_possible_classes, PRECOMP_GTZAN_TRAIN_DIR, "GTZAN Train")
+    # run_parallel_preprocessing(gtzan_raw_val,   _gtzan_all_possible_classes, PRECOMP_GTZAN_VAL_DIR,   "GTZAN Val")
+    # run_parallel_preprocessing(gtzan_raw_test,  _gtzan_all_possible_classes, PRECOMP_GTZAN_TEST_DIR,  "GTZAN Test")
+    # run_parallel_preprocessing(fma_raw_train, fma_classes_list, PRECOMP_FMA_TRAIN_DIR, "FMA Train")
+    # run_parallel_preprocessing(fma_raw_val,   fma_classes_list, PRECOMP_FMA_VAL_DIR,   "FMA Val")
+    # run_parallel_preprocessing(fma_raw_test,  fma_classes_list, PRECOMP_FMA_TEST_DIR,  "FMA Test")
 
+    # Now we build the file paths from the precomputed directories. This will now work correctly.
     gtzan_train_paths = build_precomp_paths_list(PRECOMP_GTZAN_TRAIN_DIR, _gtzan_all_possible_classes)
     gtzan_val_paths   = build_precomp_paths_list(PRECOMP_GTZAN_VAL_DIR,   _gtzan_all_possible_classes)
     gtzan_test_paths  = build_precomp_paths_list(PRECOMP_GTZAN_TEST_DIR,  _gtzan_all_possible_classes)
     print(f"Precomp GTZAN: Tr={len(gtzan_train_paths)}, Vl={len(gtzan_val_paths)}, Ts={len(gtzan_test_paths)}")
 
+    # Same fix as for GTZAN: get the FMA class list from the precomputed directory.
+    # fma_classes_list = sorted([d for d in os.listdir(PRECOMP_FMA_TRAIN_DIR) if os.path.isdir(os.path.join(FMA_ROOT, d))])
+    if not os.path.exists(PRECOMP_FMA_TRAIN_DIR) or not os.listdir(PRECOMP_FMA_TRAIN_DIR):
+        sys.exit(f"ERR: Precomputed FMA training directory not found or is empty: {PRECOMP_FMA_TRAIN_DIR}")
+    fma_classes_list = sorted([d for d in os.listdir(PRECOMP_FMA_TRAIN_DIR) if os.path.isdir(os.path.join(PRECOMP_FMA_TRAIN_DIR, d))])
+    n_fma_classes = len(fma_classes_list)
+    
     fma_train_paths = build_precomp_paths_list(PRECOMP_FMA_TRAIN_DIR, fma_classes_list)
     fma_val_paths   = build_precomp_paths_list(PRECOMP_FMA_VAL_DIR,   fma_classes_list)
-    print(f"Precomp FMA: Tr={len(fma_train_paths)}, Vl={len(fma_val_paths)}")
+    print(f"Precomp FMA: Tr={len(fma_train_paths)}, Vl={len(fma_val_paths)}. Classes: {n_fma_classes}")
 
     if not all([gtzan_train_paths, gtzan_val_paths, gtzan_test_paths]): sys.exit("ERR: Missing GTZAN precomp splits.")
     if not all([fma_train_paths, fma_val_paths]): sys.exit("ERR: Missing FMA precomp train/val.")
